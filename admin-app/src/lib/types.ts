@@ -22,18 +22,22 @@ export interface BoardInfo {
   camera?: { id: string; name: string; status: string; type: string } | null
 }
 
-export interface CameraWithBoard {
+/** عقدة كاميرا v2 — قد تغطي عدة رقع */
+export interface CameraInfo {
   id: string
   name: string
   device: string
   type: string
+  streamUrl?: string | null
   width: number
   height: number
   fps: number
+  batteryPct?: number | null
   enabled: boolean
   status: string
   lastSeen?: string | null
-  board?: BoardInfo | null
+  boards?: BoardInfo[]
+  board?: BoardInfo | null // توافق خلفي
 }
 
 export interface SystemStatus {
@@ -78,6 +82,7 @@ export interface GameRecord {
 }
 
 export const CAMERA_TYPE_LABELS: Record<string, string> = {
+  esp32: 'عقدة ESP32 (WiFi)',
   picamera2: 'كاميرا راسبيري (CSI)',
   usb: 'ويب كام USB',
   ip: 'كاميرا IP / هاتف',

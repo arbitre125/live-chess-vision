@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const [cameras, boards, settings] = await Promise.all([
-      db.camera.findMany({ include: { board: true } }),
+      db.camera.findMany({ include: { boards: true } }),
       db.board.findMany(),
       db.settings.findUnique({ where: { id: 'main' } }),
     ])

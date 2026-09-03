@@ -12,6 +12,13 @@ export async function GET() {
   return NextResponse.json({ ok: true, boards })
 }
 
+/** تطبيع الزوايا: مصفوفة ← JSON string، نص ← كما هو، null ← null */
+function normalizeCorners(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null
+  if (Array.isArray(v)) return JSON.stringify(v)
+  return String(v)
+}
+
 /** إنشاء رقعة جديدة (بدون كاميرا مؤقتاً) */
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +27,8 @@ export async function POST(req: NextRequest) {
     const board = await db.board.create({
       data: {
         label: body.label?.trim() || `الرقعة ${count + 1}`,
+        cameraId: body.cameraId ?? null,
+        corners: normalizeCorners(body.corners),
         tournament: body.tournament ?? 'بطولة النادي',
         roundLabel: body.roundLabel ?? `الجولة ${count + 1}`,
       },

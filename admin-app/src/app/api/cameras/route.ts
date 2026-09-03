@@ -3,16 +3,20 @@ import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-/** قائمة كل الكاميرات مع الرقعة المرتبطة */
+/** قائمة كل الكاميرات مع الرقع المرتبطة (v2: عدة رقع لكل كاميرا) */
 export async function GET() {
   const cameras = await db.camera.findMany({
-    include: { board: true },
+    include: { boards: true },
     orderBy: { createdAt: 'asc' },
   })
   return NextResponse.json({ ok: true, cameras })
 }
 
-/** إضافة كاميرا جديدة + رقعة مرتبطة تلقائياً */
+/**
+ * إضافة كاميرا (عقدة) جديدة.
+ * في v2: boardLabel اختياري — اتركه فارغاً لإنشاء كاميرا بدون رقعة
+ * (الرقع ستُكتشف تلقائياً لاحقاً أو تُضاف يدوياً).
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -23,23 +27,27 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         device: String(body.device ?? '0'),
-        type: String(body.type ?? 'picamera2'),
+        type: String(body.type ?? 'esp32'),
+        streamUrl: body.streamUrl ? String(body.streamUrl) : null,
         width: Number(body.width ?? 1280),
-        height: Number(body.height ?? 720),
+        height: Number(body.height ?? 1024),
         fps: Number(body.fps ?? 2),
         enabled: body.enabled !== false,
       },
     })
 
-    const count = await db.board.count()
-    const board = await db.board.create({
-      data: {
-        label: body.boardLabel?.trim() || `الرقعة ${count + 1}`,
-        cameraId: camera.id,
-        tournament: 'بطولة النادي',
-        roundLabel: `الجولة ${count + 1}`,
-      },
-    })
+    let board: unknown = null
+    if (body.boardLabel?.trim()) {
+      const count = await db.board.count()
+      board = await db.board.create({
+        data: {
+          label: body.boardLabel.trim(),
+          cameraId: camera.id,
+          tournament: 'بطولة النادي',
+          roundLabel: `الجولة ${count + 1}`,
+        },
+      })
+    }
 
     return NextResponse.json({ ok: true, camera, board })
   } catch (e) {

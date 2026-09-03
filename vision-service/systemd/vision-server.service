@@ -1,0 +1,18 @@
+[Unit]
+Description=Live Chess Vision — خادم الرؤية v2 (منفذ CameraChessWeb)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# عدّل المسار حسب مكان الاستنساخ
+WorkingDirectory=/home/pi/live-chess-vision/vision-service
+Environment="VISION_PORT=8000"
+# مجلد نماذج ONNX (يُنشأ بـ download_models.py)
+ExecStart=/usr/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+User=pi
+
+[Install]
+WantedBy=multi-user.target

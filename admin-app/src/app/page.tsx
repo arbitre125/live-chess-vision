@@ -17,11 +17,11 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react'
-import type { BoardInfo, CameraWithBoard, SettingsInfo, SystemStatus } from '@/lib/types'
+import type { BoardInfo, CameraInfo, SettingsInfo, SystemStatus } from '@/lib/types'
 
 export default function AdminPage() {
   const [status, setStatus] = useState<SystemStatus | null>(null)
-  const [cameras, setCameras] = useState<CameraWithBoard[]>([])
+  const [cameras, setCameras] = useState<CameraInfo[]>([])
   const [boards, setBoards] = useState<BoardInfo[]>([])
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [refreshing, setRefreshing] = useState(false)

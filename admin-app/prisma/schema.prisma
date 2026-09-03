@@ -12,28 +12,30 @@ datasource db {
 // قاعدة بيانات صفحة الأدمن على الراسبيري
 // ─────────────────────────────────────────────────────────────
 
-// كاميرا واحدة تغطي رقعة واحدة
+// عقدة كاميرا — في v2 قد تغطي الكاميرا الواحدة عدة رقع (1..4)
 model Camera {
   id         String   @id @default(cuid())
-  name       String // "الكاميرا 1 — الطاولة A"
+  name       String // "الكاميرا 1 — الجهة اليمنى"
   device     String   @default("0") // فهرس picamera2 أو /dev/video0 أو رابط IP
-  type       String   @default("picamera2") // picamera2 | usb | ip
+  type       String   @default("esp32") // esp32 | picamera2 | usb | ip
+  streamUrl  String?  // رابط بث عقدة ESP32: http://chesscam-1.local/stream
   width      Int      @default(1280)
-  height     Int      @default(720)
-  fps        Int      @default(2) // إطارات كافية لتحليل النقلات دون إرهاق المعالج
+  height     Int      @default(1024)
+  fps        Int      @default(2)
+  batteryPct Int?     // آخر قراءة بطارية من العقدة (%)
   enabled    Boolean  @default(true)
   status     String   @default("offline") // offline | online | detecting | error
   lastSeen   DateTime?
-  board      Board?
+  boards     Board[] // v2: عدة رقع لكل كاميرا
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
-// الرقعة المرتبطة بكاميرا (1:1)
+// رقعة مراقبة — قد تتشارك الكاميرا مع رقع أخرى (1 كاميرا ← 1..4 رقعة)
 model Board {
   id           String   @id @default(cuid())
   label        String // "الرقعة 1"
-  cameraId     String?  @unique
+  cameraId     String?
   camera       Camera?  @relation(fields: [cameraId], references: [id], onDelete: SetNull)
 
   // إحداثيات زوايا الرقعة الأربع في صورة الكاميرا (JSON: [[x,y]×4])

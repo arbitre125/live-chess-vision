@@ -4,6 +4,13 @@ import { buildPgn } from '@/lib/chess-helper'
 
 export const dynamic = 'force-dynamic'
 
+/** تطبيع الزوايا: مصفوفة ← JSON string، نص ← كما هو، null ← null */
+function normalizeCorners(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null
+  if (Array.isArray(v)) return JSON.stringify(v)
+  return String(v)
+}
+
 /** تفاصيل رقعة مع نقلاتها */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -26,6 +33,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const data: Record<string, unknown> = {}
 
     if (body.label !== undefined) data.label = String(body.label)
+    if (body.cameraId !== undefined) data.cameraId = body.cameraId ? String(body.cameraId) : null
+    if (body.corners !== undefined) data.corners = normalizeCorners(body.corners)
     if (body.whitePlayer !== undefined) data.whitePlayer = String(body.whitePlayer)
     if (body.whiteRating !== undefined) data.whiteRating = Number(body.whiteRating)
     if (body.blackPlayer !== undefined) data.blackPlayer = String(body.blackPlayer)

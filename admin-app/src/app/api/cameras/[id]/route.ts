@@ -12,9 +12,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.name !== undefined) data.name = String(body.name)
     if (body.device !== undefined) data.device = String(body.device)
     if (body.type !== undefined) data.type = String(body.type)
+    if (body.streamUrl !== undefined) data.streamUrl = body.streamUrl ? String(body.streamUrl) : null
     if (body.width !== undefined) data.width = Number(body.width)
     if (body.height !== undefined) data.height = Number(body.height)
     if (body.fps !== undefined) data.fps = Number(body.fps)
+    if (body.batteryPct !== undefined) data.batteryPct = body.batteryPct === null ? null : Number(body.batteryPct)
     if (body.enabled !== undefined) data.enabled = Boolean(body.enabled)
     if (body.status !== undefined) data.status = String(body.status)
 

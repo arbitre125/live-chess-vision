@@ -1,4 +1,11 @@
+# متطلبات خدمة الرؤية v2 — تعمل على حاسوب (Linux/Windows/macOS) أو Raspberry Pi 4/5
+onnxruntime>=1.17        # استدلال نماذج LeYOLO (منفذ CameraChessWeb)
+opencv-python-headless>=4.9
 numpy>=1.24
-opencv-python-headless>=4.8
+chess>=1.10              # منطق الشطرنج (بديل chessops في الأصل)
+scipy>=1.11              # Delaunay للاكتشاف التلقائي للرقع
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
 requests>=2.31
-picamera2; platform_machine == "aarch64"
+gdown>=5.0               # تحميل نماذج ONNX من Google Drive
