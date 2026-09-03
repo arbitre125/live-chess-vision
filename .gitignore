@@ -1,0 +1,29 @@
+# ملفات النظام
+__pycache__/
+*.pyc
+venv/
+vision-service/config.json
+vision-service/vision.log
+
+# صفحة الأدمن (Next.js)
+admin-app/node_modules/
+admin-app/.next/
+admin-app/out/
+admin-app/prisma/dev.db
+admin-app/prisma/dev.db-journal
+admin-app/.env
+admin-app/.env*.local
+
+# النظام
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# ملفات العمل المحلية
+download/
+scripts/dev*.sh
+.zscripts/
+dev.log
+server.log
+Caddyfile

@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// نظام الشطرنج الحي بالكاميرا — Live Chess Vision
+// قاعدة بيانات صفحة الأدمن على الراسبيري
+// ─────────────────────────────────────────────────────────────
+
+// كاميرا واحدة تغطي رقعة واحدة
+model Camera {
+  id         String   @id @default(cuid())
+  name       String // "الكاميرا 1 — الطاولة A"
+  device     String   @default("0") // فهرس picamera2 أو /dev/video0 أو رابط IP
+  type       String   @default("picamera2") // picamera2 | usb | ip
+  width      Int      @default(1280)
+  height     Int      @default(720)
+  fps        Int      @default(2) // إطارات كافية لتحليل النقلات دون إرهاق المعالج
+  enabled    Boolean  @default(true)
+  status     String   @default("offline") // offline | online | detecting | error
+  lastSeen   DateTime?
+  board      Board?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// الرقعة المرتبطة بكاميرا (1:1)
+model Board {
+  id           String   @id @default(cuid())
+  label        String // "الرقعة 1"
+  cameraId     String?  @unique
+  camera       Camera?  @relation(fields: [cameraId], references: [id], onDelete: SetNull)
+
+  // إحداثيات زوايا الرقعة الأربع في صورة الكاميرا (JSON: [[x,y]×4])
+  corners      String? // TL, TR, BR, BL
+  orientation  String   @default("white-bottom") // white-bottom | white-top | rotated90
+  diffThreshold Float   @default(0.18) // حساسية كشف التغيير بين الإطارات
+
+  // اللاعبون
+  whitePlayer  String   @default("أبيض")
+  whiteRating  Int      @default(0)
+  blackPlayer  String   @default("أسود")
+  blackRating  Int      @default(0)
+  tournament   String   @default("بطولة النادي")
+  roundLabel   String   @default("الجولة 1")
+
+  // حالة اللعبة الحالية
+  fen          String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  moves        String   @default("[]") // JSON: ["e4","e5",...]
+  status       String   @default("idle") // idle | live | finished
+  lastMoveFrom String?
+  lastMoveTo   String?
+  result       String?
+
+  movesHistory Move[]
+  games        Game[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// نقلة واحدة مكتشفة
+model Move {
+  id         String   @id @default(cuid())
+  boardId    String
+  board      Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  moveNumber Int
+  san        String // "Nf3" أو "exd5" ...
+  fromSq     String // "e2"
+  toSq       String // "e4"
+  fenAfter   String
+  confidence Float    @default(1.0)
+  source     String   @default("vision") // vision | manual | simulate
+  createdAt  DateTime @default(now())
+}
+
+// لعبة مكتملة (أرشيف)
+model Game {
+  id         String    @id @default(cuid())
+  boardId    String
+  board      Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  moves      String    @default("[]") // JSON SAN
+  pgn        String    @default("")
+  result     String? // "1-0" | "0-1" | "1/2-1/2"
+  whitePlayer String   @default("")
+  blackPlayer String   @default("")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+}
+
+// إعدادات النظام العامة (سجل واحد)
+model Settings {
+  id              String   @id @default("main")
+  clubName        String   @default("نادي سبورتينغ أريانة للشطرنج")
+  githubToken     String   @default("")
+  githubRepo      String   @default("arbitre125/Home")
+  githubBranch    String   @default("feature/live-chess-games-sporting-ariana")
+  githubDataPath  String   @default("live-data/boards.json")
+  autoPush        Boolean  @default(true)
+  pushIntervalSec Int      @default(30)
+  lastSyncAt      DateTime?
+  lastSyncStatus  String   @default("") // success | error | ""
+  lastSyncMessage String   @default("")
+  updatedAt       DateTime @updatedAt
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Live Chess Vision - خدمة كشف نقلات الشطرنج بالكاميرا
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/live-chess-vision/vision-service
+ExecStart=/home/pi/live-chess-vision/venv/bin/python3 main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+{
+  "admin_url": "http://localhost:3000",
+  "config_poll_seconds": 30,
+  "loop_delay_seconds": 0.4,
+  "stable_frames": 2,
+  "move_cooldown_seconds": 1.5
+}

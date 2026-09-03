@@ -1,0 +1,34 @@
+{
+  "source": "live-chess-vision",
+  "club": "نادي سبورتينغ أريانة للشطرنج",
+  "venue": "النادي — أريانة، تونس",
+  "roundLabel": "الجولة 1",
+  "updatedAt": "2026-09-03T17:30:00.000Z",
+  "gamesCount": 1,
+  "games": [
+    {
+      "id": "example-board-1",
+      "board": "الرقعة 1",
+      "status": "live",
+      "players": [
+        { "name": "أبيض", "rating": 0, "title": "", "photo": "" },
+        { "name": "أسود", "rating": 0, "title": "", "photo": "" }
+      ],
+      "clocks": [0, 0],
+      "format": "كلاسيكي",
+      "speed": "كلاسيكي",
+      "opening": "",
+      "viewers": 0,
+      "turn": 0,
+      "moves": [],
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "lastMove": null,
+      "checkSquare": null,
+      "captured": ["", ""],
+      "evalCp": 0,
+      "moveKind": null,
+      "resultText": "",
+      "whiteWins": false
+    }
+  ]
+}
