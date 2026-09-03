@@ -9,3 +9,4 @@ uvicorn>=0.29
 pydantic>=2.6
 requests>=2.31
 gdown>=5.0               # تحميل نماذج ONNX من Google Drive
+Pillow>=10.0             # اختياري: لرسم رموز القطع في الكاميرا الافتراضية

@@ -35,9 +35,16 @@ import {
   ScanSearch,
   BatteryMedium,
   Link2,
+  MousePointerClick,
+  Keyboard,
+  Undo2,
+  Eraser,
+  Info,
 } from 'lucide-react'
 import type { BoardInfo, CameraInfo } from '@/lib/types'
-import { CAMERA_TYPE_LABELS, STATUS_LABELS } from '@/lib/types'
+import { useI18n } from '@/components/language-provider'
+import { VirtualCameraView } from '@/components/admin/virtual-camera'
+import { InteractiveCalibration, CORNER_KEYS, type Pt } from '@/components/admin/interactive-calibration'
 
 interface CamerasTabProps {
   cameras: CameraInfo[]
@@ -45,104 +52,87 @@ interface CamerasTabProps {
   onChange: () => void
 }
 
-interface CornerInputs {
-  tl: [string, string]
-  tr: [string, string]
-  br: [string, string]
-  bl: [string, string]
-}
-
-const DEFAULT_CORNERS: CornerInputs = {
-  tl: ['120', '80'],
-  tr: ['520', '80'],
-  br: ['520', '300'],
-  bl: ['120', '300'],
-}
-
-/** معاينة حية من خادم الرؤية + مضلعات الرقع المعايرة */
-function LivePreview({ cameraId, cornersList }: { cameraId: string; cornersList: [number, number][] }) {
+/** إدخال رقمي مع مسودة محلية لسلاسة الكتابة */
+function CornerNumInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: number | undefined
+  onChange: (n: number) => void
+  placeholder: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
   return (
-    <div dir="ltr" className="relative overflow-hidden rounded-lg border bg-[#0f172a]">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/vision/cameras/${cameraId}/stream.mjpg`}
-        alt="بث حي"
-        className="block w-full"
-        onError={(e) => {
-          const el = e.currentTarget
-          el.style.display = 'none'
-          const fb = el.nextElementSibling as HTMLElement | null
-          if (fb) fb.style.display = 'block'
-        }}
-      />
-      <div className="hidden aspect-video w-full items-center justify-center text-sm text-slate-400">
-        لا بث متاح — تأكد أن خدمة الرؤية تعمل وأن الكاميرا مسجلة فيها
-      </div>
-      {cornersList.length === 4 && (
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-          <polygon
-            points={cornersList.map(([x, y]) => `${x},${y}`).join(' ')}
-            fill="rgba(16,185,129,0.12)"
-            stroke="#10b981"
-            strokeWidth="0.6"
-          />
-        </svg>
-      )}
-    </div>
+    <Input
+      dir="ltr"
+      className="h-8 text-xs"
+      inputMode="numeric"
+      value={draft ?? (value != null ? String(value) : '')}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        const n = parseFloat(e.target.value)
+        if (!isNaN(n)) onChange(n)
+      }}
+      onBlur={() => setDraft(null)}
+      placeholder={placeholder}
+    />
   )
 }
 
-/** معاينة SVG تفاعلية للزوايا المُدخلة يدوياً */
-function CalibrationPreview({ corners }: { corners: CornerInputs }) {
-  const pts = useMemo(() => {
-    const p = (v: string, fallback: number) => {
-      const n = parseFloat(v)
-      return isNaN(n) ? fallback : n
-    }
-    return {
-      tl: [p(corners.tl[0], 120), p(corners.tl[1], 80)],
-      tr: [p(corners.tr[0], 520), p(corners.tr[1], 80)],
-      br: [p(corners.br[0], 520), p(corners.br[1], 300)],
-      bl: [p(corners.bl[0], 120), p(corners.bl[1], 300)],
-    }
-  }, [corners])
-
-  const lerp = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-
+/** معاينة ثابتة صغيرة للرباعية (وضع الأرقام) بترتيب [h1,a1,a8,h8] */
+function StaticQuadPreview({ pts, frameW, frameH }: { pts: Pt[]; frameW: number; frameH: number }) {
+  const s = 640 / Math.max(1, frameW)
+  const q = pts.map(([x, y]) => [x * s, y * (360 / Math.max(1, frameH))] as Pt)
+  const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
   const gridLines: string[] = []
-  for (let i = 0; i <= 8; i++) {
-    const t = i / 8
-    const top = lerp(pts.tl, pts.tr, t)
-    const bottom = lerp(pts.bl, pts.br, t)
-    gridLines.push(`M ${top[0]} ${top[1]} L ${bottom[0]} ${bottom[1]}`)
-    const left = lerp(pts.tl, pts.bl, t)
-    const right = lerp(pts.tr, pts.br, t)
-    gridLines.push(`M ${left[0]} ${left[1]} L ${right[0]} ${right[1]}`)
+  if (q.length === 4) {
+    const [p0, p1, p2, p3] = q
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8
+      gridLines.push(`M ${lerp(p0, p1, t)[0]} ${lerp(p0, p1, t)[1]} L ${lerp(p3, p2, t)[0]} ${lerp(p3, p2, t)[1]}`)
+      gridLines.push(`M ${lerp(p1, p2, t)[0]} ${lerp(p1, p2, t)[1]} L ${lerp(p0, p3, t)[0]} ${lerp(p0, p3, t)[1]}`)
+    }
   }
-
-  const polygon = `M ${pts.tl[0]} ${pts.tl[1]} L ${pts.tr[0]} ${pts.tr[1]} L ${pts.br[0]} ${pts.br[1]} L ${pts.bl[0]} ${pts.bl[1]} Z`
-
   return (
     <div dir="ltr" className="overflow-hidden rounded-lg border">
       <svg viewBox="0 0 640 360" className="block w-full bg-[#3b4252]">
-        <path d={polygon} fill="rgba(16,185,129,0.10)" stroke="#10b981" strokeWidth="2" />
-        {gridLines.map((d, i) => (
-          <path key={i} d={d} stroke="rgba(16,185,129,0.35)" strokeWidth="0.7" fill="none" />
-        ))}
-        {Object.entries(pts).map(([k, p]) => (
-          <g key={k}>
-            <circle cx={p[0]} cy={p[1]} r="6" fill="#f59e0b" stroke="#fff" strokeWidth="1.5" />
-            <text x={p[0] + 10} y={p[1] - 8} fill="#fbbf24" fontSize="11" fontWeight="bold">
-              {k.toUpperCase()}
+        {q.length === 4 && (
+          <>
+            <polygon
+              points={q.map(([x, y]) => `${x},${y}`).join(' ')}
+              fill="rgba(245,158,11,0.10)"
+              stroke="#f59e0b"
+              strokeWidth="2"
+            />
+            {gridLines.map((d, i) => (
+              <path key={i} d={d} stroke="rgba(245,158,11,0.35)" strokeWidth="0.7" fill="none" />
+            ))}
+          </>
+        )}
+        {q.length > 1 && (
+          <polyline points={q.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#fbbf24" strokeWidth="2" strokeDasharray="6 4" />
+        )}
+        {q.map(([x, y], i) => (
+          <g key={i}>
+            <circle cx={x} cy={y} r="6" fill="#f59e0b" stroke="#fff" strokeWidth="1.5" />
+            <text x={x + 9} y={y - 7} fill="#fde68a" fontSize="11" fontWeight="bold">
+              {CORNER_KEYS[i]}
             </text>
           </g>
         ))}
+        {q.length === 0 && (
+          <text x="320" y="180" fill="#94a3b8" fontSize="13" textAnchor="middle">
+            —
+          </text>
+        )}
       </svg>
     </div>
   )
 }
 
 export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
+  const { t } = useI18n()
   const { toast } = useToast()
   const [addOpen, setAddOpen] = useState(false)
   const [setupCam, setSetupCam] = useState<CameraInfo | null>(null)
@@ -155,7 +145,7 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
   const [newBoardLabel, setNewBoardLabel] = useState('')
   const [adding, setAdding] = useState(false)
 
-  // نموذج الإعداد والمعايرة
+  // نموذج الإعداد
   const [formName, setFormName] = useState('')
   const [formType, setFormType] = useState('esp32')
   const [formDevice, setFormDevice] = useState('0')
@@ -164,16 +154,24 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
   const [formHeight, setFormHeight] = useState('1024')
   const [formFps, setFormFps] = useState('2')
   const [formEnabled, setFormEnabled] = useState(true)
-  const [corners, setCorners] = useState<CornerInputs>(DEFAULT_CORNERS)
+
+  // المعايرة — مصدر واحد للحقيقة: مصفوفة نقاط رقمية [h1,a1,a8,h8]
+  const [pts, setPts] = useState<Pt[]>([])
   const [selectedBoardId, setSelectedBoardId] = useState<string>('')
   const [savingCal, setSavingCal] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [previewOn, setPreviewOn] = useState(false)
+  const [streamState, setStreamState] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(null)
+  const [calMode, setCalMode] = useState<'visual' | 'numbers'>('visual')
 
   const camBoards = useMemo(
     () => (setupCam ? boards.filter((b) => b.cameraId === setupCam.id) : []),
     [setupCam, boards]
   )
+
+  const wNum = Math.max(64, parseInt(formWidth) || 1280)
+  const hNum = Math.max(64, parseInt(formHeight) || 1024)
 
   useEffect(() => {
     if (!setupCam) return
@@ -185,34 +183,59 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
     setFormHeight(String(setupCam.height))
     setFormFps(String(setupCam.fps))
     setFormEnabled(setupCam.enabled)
+    setPreviewOn(setupCam.type === 'virtual')
+    setStreamState('idle')
+    setFrameSize(null)
+    setCalMode('visual')
+  }, [setupCam])
+
+  // اختيار أول رقعة تلقائياً — دون التمسّ بالاختيار الحالي مع كل استقصاء دوري
+  useEffect(() => {
+    if (!setupCam) return
     const first = boards.find((b) => b.cameraId === setupCam.id)
-    setSelectedBoardId(first?.id ?? '')
+    setSelectedBoardId((prev) => (prev && boards.some((b) => b.id === prev) ? prev : (first?.id ?? '')))
   }, [setupCam, boards])
 
-  // عند تغيير الرقعة المحددة حمّل زواياها
+  // زوايا الرقعة المحددة — قيمة نصية فقط حتى لا تُصفّر النقاط مع التحديثات الدورية
+  const selectedCornersRaw = useMemo(
+    () => camBoards.find((x) => x.id === selectedBoardId)?.corners ?? null,
+    [camBoards, selectedBoardId]
+  )
   useEffect(() => {
-    const b = camBoards.find((x) => x.id === selectedBoardId)
-    if (b?.corners) {
-      try {
-        const c = JSON.parse(b.corners) as [number, number][]
-        // التخزين: h1,a1,a8,h8 (خادم الرؤية) أو TL,TR,BR,BL (قديم)
-        setCorners({
-          tl: [String(c[0][0]), String(c[0][1])],
-          tr: [String(c[1][0]), String(c[1][1])],
-          br: [String(c[2][0]), String(c[2][1])],
-          bl: [String(c[3][0]), String(c[3][1])],
-        })
-      } catch {
-        setCorners(DEFAULT_CORNERS)
-      }
-    } else {
-      setCorners(DEFAULT_CORNERS)
+    if (!selectedCornersRaw) {
+      setPts([])
+      return
     }
-  }, [selectedBoardId, camBoards])
+    try {
+      const c = JSON.parse(selectedCornersRaw) as Pt[]
+      if (Array.isArray(c) && c.length === 4) {
+        setPts(c.map(([x, y]) => [Number(x), Number(y)] as Pt))
+        return
+      }
+    } catch {
+      /* تجاهل */
+    }
+    setPts([])
+  }, [selectedCornersRaw])
+
+  /** رقع أخرى معايرة لعرضها في طبقة المعايرة */
+  const otherBoards = useMemo(() => {
+    return camBoards
+      .filter((b) => b.id !== selectedBoardId && b.corners)
+      .map((b) => {
+        try {
+          const c = JSON.parse(b.corners as string) as Pt[]
+          return { id: b.id, label: b.label, corners: c }
+        } catch {
+          return null
+        }
+      })
+      .filter((x): x is { id: string; label: string; corners: Pt[] } => x !== null && x.corners.length === 4)
+  }, [camBoards, selectedBoardId])
 
   async function handleAdd() {
     if (!newName.trim()) {
-      toast({ title: 'أدخل اسماً للكاميرا', variant: 'destructive' })
+      toast({ title: t('cam.add.failName'), variant: 'destructive' })
       return
     }
     setAdding(true)
@@ -223,32 +246,35 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
         body: JSON.stringify({
           name: newName,
           type: newType,
-          device: newDevice,
+          device: newType === 'esp32' || newType === 'virtual' ? '0' : newDevice,
           streamUrl: newType === 'esp32' ? newStreamUrl : undefined,
           boardLabel: newBoardLabel,
-          width: newType === 'esp32' ? 1280 : undefined,
-          height: newType === 'esp32' ? 1024 : undefined,
+          width: newType === 'usb' ? undefined : 1280,
+          height: newType === 'usb' ? undefined : 1024,
         }),
       })
       const json = await res.json()
       if (!json.ok) throw new Error(json.error)
       toast({
-        title: 'تمت إضافة الكاميرا',
-        description: json.board ? `أُنشئت ${json.board.label} مرتبطة بها` : 'سجّلها في خدمة الرؤية ثم اكتشف الرقع تلقائياً',
+        title: t('cam.added.title'),
+        description: json.board
+          ? t('cam.added.desc', { b: json.board.label })
+          : t('cam.added.desc2'),
       })
       setAddOpen(false)
       setNewName('')
       setNewBoardLabel('')
       onChange()
     } catch (e) {
-      toast({ title: 'فشلت الإضافة', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+      toast({ title: t('cam.add.fail'), description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
       setAdding(false)
     }
   }
 
-  /** تسجيل الكاميرا في خدمة الرؤية مع زر حديث */
+  /** تسجيل الكاميرا في خدمة الرؤية (لا ينطبق على الافتراضية) */
   async function registerInVision(cam: CameraInfo, url: string) {
+    if (cam.type === 'virtual' && !url) return
     await fetch(`/api/vision/cameras/${cam.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -261,23 +287,23 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
 
   async function saveBasics() {
     if (!setupCam) return
+    const isVirtual = formType === 'virtual'
     await fetch(`/api/cameras/${setupCam.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: formName,
         type: formType,
-        device: formDevice,
+        device: isVirtual ? '0' : formDevice,
         streamUrl: formType === 'esp32' ? formStreamUrl : null,
-        width: Number(formWidth),
-        height: Number(formHeight),
+        width: isVirtual ? 1280 : Number(formWidth),
+        height: isVirtual ? 1024 : Number(formHeight),
         fps: Number(formFps),
         enabled: formEnabled,
       }),
     })
-    // سجّلها في خدمة الرؤية
-    await registerInVision(setupCam, formStreamUrl)
-    toast({ title: 'حُفظت الإعدادات وسُجّلت الكاميرا في خدمة الرؤية' })
+    if (!isVirtual) await registerInVision(setupCam, formStreamUrl)
+    toast({ title: t('cam.savedRegistered') })
     onChange()
   }
 
@@ -289,16 +315,12 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
       await registerInVision(setupCam, formStreamUrl)
       const res = await fetch(`/api/vision/cameras/${setupCam.id}/discover`, { method: 'POST' })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.detail ?? 'فشل الاكتشاف')
-      const found = json.boards as { corners: [number, number][]; score: number }[]
+      if (!res.ok) throw new Error(json.detail ?? t('cam.discover.fail'))
+      const found = json.boards as { corners: Pt[]; score: number }[]
       if (!found.length) {
-        toast({
-          title: 'لم تُكتشف رقع',
-          description: 'تأكد من ظهور رقع بعلامات × كاملة في الإطار ومن الإضاءة',
-        })
+        toast({ title: t('cam.discover.none'), description: t('cam.discover.noneDesc') })
         return
       }
-      // أنشئ رقعة جديدة لكل رقعة غير مرتبطة أصلاً بهذه الكاميرا
       const existing = boards.filter((b) => b.cameraId === setupCam.id).length
       let created = 0
       for (let i = 0; i < found.length; i++) {
@@ -306,7 +328,7 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            label: `${setupCam.name} — رقعة ${existing + i + 1}`,
+            label: t('cam.discover.boardLabel', { cam: setupCam.name, n: existing + i + 1 }),
             cameraId: setupCam.id,
             corners: JSON.stringify(found[i].corners),
           }),
@@ -314,7 +336,6 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
         const j2 = await res2.json()
         if (j2.ok) {
           created++
-          // سجلها في خادم الرؤية للتتبع الفوري
           await fetch(`/api/vision/boards/${j2.board.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -323,13 +344,13 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
         }
       }
       toast({
-        title: `اكتُشفت ${found.length} رقعة`,
-        description: `أُنشئت ${created} رقعة معايرة تلقائياً — عدّل أسماءها وبيانات اللاعبين`,
+        title: t('cam.discover.done', { n: found.length }),
+        description: t('cam.discover.doneDesc', { c: created }),
       })
       onChange()
     } catch (e) {
       toast({
-        title: 'فشل الاكتشاف التلقائي',
+        title: t('cam.discover.fail'),
         description: e instanceof Error ? e.message : '',
         variant: 'destructive',
       })
@@ -340,53 +361,48 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
 
   async function saveCalibration() {
     if (!setupCam) return
+    if (pts.length !== 4) {
+      toast({ title: t('cam.cal.need4'), variant: 'destructive' })
+      return
+    }
     setSavingCal(true)
     try {
-      const cornersArr: [number, number][] = [
-        [parseFloat(corners.tl[0]), parseFloat(corners.tl[1])],
-        [parseFloat(corners.tr[0]), parseFloat(corners.tr[1])],
-        [parseFloat(corners.br[0]), parseFloat(corners.br[1])],
-        [parseFloat(corners.bl[0]), parseFloat(corners.bl[1])],
-      ]
-      if (!selectedBoardId) {
-        // لا رقعة محددة: احفظ على أول رقعة للكاميرا أو أنشئ واحدة
+      let boardId = selectedBoardId
+      if (!boardId) {
         const resB = await fetch('/api/boards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            label: `${setupCam.name} — رقعة 1`,
+            label: t('cam.discover.boardLabel', { cam: setupCam.name, n: camBoards.length + 1 }),
             cameraId: setupCam.id,
-            corners: JSON.stringify(cornersArr),
+            corners: JSON.stringify(pts),
           }),
         })
         const jB = await resB.json()
         if (!jB.ok) throw new Error(jB.error)
+        boardId = jB.board.id
       } else {
-        const res = await fetch(`/api/boards/${selectedBoardId}`, {
+        const res = await fetch(`/api/boards/${boardId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ corners: JSON.stringify(cornersArr) }),
+          body: JSON.stringify({ corners: JSON.stringify(pts) }),
         })
         const json = await res.json()
         if (!json.ok) throw new Error(json.error)
       }
-      // سجل في خادم الرؤية
-      const bid = selectedBoardId || undefined
-      if (bid) {
-        await fetch(`/api/vision/boards/${bid}`, {
+      if (formType !== 'virtual') {
+        await fetch(`/api/vision/boards/${boardId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: setupCam.id, corners: cornersArr }),
+          body: JSON.stringify({ camera_id: setupCam.id, corners: pts }),
         }).catch(() => {})
       }
-      toast({
-        title: 'تمت المعايرة',
-        description: 'خُزنت زوايا الرقعة وسُجلت في خدمة الرؤية',
-      })
+      toast({ title: t('cam.cal.saved'), description: t('cam.cal.savedDesc') })
+      setSelectedBoardId(boardId)
       onChange()
     } catch (e) {
       toast({
-        title: 'فشلت المعايرة',
+        title: t('cam.cal.fail'),
         description: e instanceof Error ? e.message : '',
         variant: 'destructive',
       })
@@ -397,9 +413,9 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
 
   async function deleteCamera(cam: CameraInfo) {
     const n = boards.filter((b) => b.cameraId === cam.id).length
-    if (!confirm(`حذف «${cam.name}»؟ ${n > 0 ? `${n} رقعة ستبقى بدون كاميرا.` : ''}`)) return
+    if (!confirm(t('cam.deleteConfirm', { name: cam.name, n: n > 0 ? t('cam.deleteConfirmBoards', { n }) : '' }))) return
     await fetch(`/api/cameras/${cam.id}`, { method: 'DELETE' })
-    toast({ title: 'حُذفت الكاميرا' })
+    toast({ title: t('cam.deleted') })
     onChange()
   }
 
@@ -410,28 +426,35 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
         : status === 'error'
           ? 'bg-red-600'
           : 'bg-slate-400'
-    return <Badge className={color}>{STATUS_LABELS[status] ?? status}</Badge>
+    return <Badge className={color}>{t(`status.${status}`)}</Badge>
   }
 
-  const selectedCornersForPreview: [number, number][] | null = useMemo(() => {
-    const b = camBoards.find((x) => x.id === selectedBoardId)
-    if (!b?.corners) return null
-    try {
-      return JSON.parse(b.corners) as [number, number][]
-    } catch {
-      return null
-    }
-  }, [camBoards, selectedBoardId])
+  function updatePtSlot(i: number, axis: 0 | 1, n: number) {
+    const seeds: Pt[] = [
+      [Math.round(wNum * 0.742), Math.round(hNum * 0.81)],
+      [Math.round(wNum * 0.336), Math.round(hNum * 0.771)],
+      [Math.round(wNum * 0.367), Math.round(hNum * 0.293)],
+      [Math.round(wNum * 0.773), Math.round(hNum * 0.332)],
+    ]
+    const next: Pt[] = CORNER_KEYS.map((_, k) => pts[k] ?? seeds[k])
+    next[i] = axis === 0 ? [n, next[i][1]] : [next[i][0], n]
+    setPts(next)
+  }
+
+  const cornerLabels: Record<string, string> = {
+    h1: t('cam.corner.h1'),
+    a1: t('cam.corner.a1'),
+    a8: t('cam.corner.a8'),
+    h8: t('cam.corner.h8'),
+  }
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          v2: عقدة ESP32 واحدة تغطي حتى 4 رقع — ضع الكاميرا عالياً بزاوية واسعة واكتشف الرقع تلقائياً
-        </p>
+        <p className="text-sm text-muted-foreground">{t('cam.hint')}</p>
         <Button onClick={() => setAddOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
           <Plus className="h-4 w-4 ml-1" />
-          إضافة عقدة كاميرا
+          {t('cam.add')}
         </Button>
       </div>
 
@@ -439,8 +462,8 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
         <Card>
           <CardContent className="space-y-2 p-10 text-center text-muted-foreground">
             <CameraIcon className="mx-auto h-10 w-10 opacity-40" />
-            <p className="font-medium">لا توجد كاميرات بعد</p>
-            <p className="text-sm">أضف عقدة ESP32 الأولى واربطها بشبكة النادي</p>
+            <p className="font-medium">{t('cam.empty.title')}</p>
+            <p className="text-sm">{t('cam.empty.sub')}</p>
           </CardContent>
         </Card>
       ) : (
@@ -460,7 +483,9 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">{CAMERA_TYPE_LABELS[cam.type] ?? cam.type}</Badge>
+                    <Badge variant="outline" className={cam.type === 'virtual' ? 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-800' : ''}>
+                      {t(`camtype.${cam.type}`)}
+                    </Badge>
                     <Badge variant="outline">
                       {cam.width}×{cam.height}
                     </Badge>
@@ -473,7 +498,7 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">الرقع المرتبطة</span>
+                    <span className="text-muted-foreground">{t('cam.boardsLinked')}</span>
                     <Badge className={camB.length ? 'bg-emerald-600' : 'bg-slate-400'}>
                       <Link2 className="ml-1 h-3 w-3" />
                       {camB.length} / 4
@@ -485,9 +510,9 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
                         <div key={b.id} className="flex items-center justify-between rounded bg-muted/40 px-2 py-1 text-xs">
                           <span className="truncate">{b.label}</span>
                           {b.corners ? (
-                            <Badge variant="outline" className="text-[10px] text-emerald-700">معايرة ✓</Badge>
+                            <Badge variant="outline" className="text-[10px] text-emerald-700">{t('cam.calibrated')}</Badge>
                           ) : (
-                            <Badge variant="outline" className="text-[10px]">غير معايرة</Badge>
+                            <Badge variant="outline" className="text-[10px]">{t('cam.notCalibrated')}</Badge>
                           )}
                         </div>
                       ))}
@@ -496,7 +521,7 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
                   <div className="flex gap-2 pt-2">
                     <Button size="sm" variant="outline" className="flex-1" onClick={() => setSetupCam(cam)}>
                       <Settings2 className="h-4 w-4 ml-1" />
-                      إعداد ومعايرة
+                      {t('cam.setup')}
                     </Button>
                     <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => deleteCamera(cam)}>
                       <Trash2 className="h-4 w-4" />
@@ -513,60 +538,62 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>إضافة عقدة كاميرا</DialogTitle>
-            <DialogDescription>
-              عقدة ESP32 تعمل بالبطارية وتبث عبر WiFi — رقعة أو أربع لكل عقدة
-            </DialogDescription>
+            <DialogTitle>{t('cam.add.title')}</DialogTitle>
+            <DialogDescription>{t('cam.add.desc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>اسم العقدة</Label>
+              <Label>{t('cam.name')}</Label>
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="مثال: الكاميرا 1 — الجهة اليمنى"
+                placeholder={t('cam.name.ph')}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>النوع</Label>
+              <Label>{t('cam.type')}</Label>
               <Select value={newType} onValueChange={setNewType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="esp32">عقدة ESP32 (WiFi + بطارية)</SelectItem>
-                  <SelectItem value="usb">ويب كام USB</SelectItem>
-                  <SelectItem value="picamera2">كاميرا راسبيري (CSI)</SelectItem>
-                  <SelectItem value="ip">كاميرا IP / هاتف</SelectItem>
+                  <SelectItem value="esp32">{t('camtype.esp32')}</SelectItem>
+                  <SelectItem value="usb">{t('camtype.usb')}</SelectItem>
+                  <SelectItem value="picamera2">{t('camtype.picamera2')}</SelectItem>
+                  <SelectItem value="ip">{t('camtype.ip')}</SelectItem>
+                  <SelectItem value="virtual">{t('camtype.virtual')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {newType === 'esp32' && (
               <div className="space-y-1.5">
                 <Label>
-                  رابط البث <span className="text-xs text-muted-foreground">(من شاشة العقدة)</span>
+                  {t('cam.streamUrl')} <span className="text-xs text-muted-foreground">({t('cam.streamUrl.hint')})</span>
                 </Label>
                 <Input dir="ltr" value={newStreamUrl} onChange={(e) => setNewStreamUrl(e.target.value)} />
-                <p className="text-[11px] text-muted-foreground">
-                  شغّل العقدة واتصل بشبكتها ChessCam-XXXX لضبط WiFi — ثم سيظهر الرابط
-                </p>
+                <p className="text-[11px] text-muted-foreground">{t('cam.streamUrl.help')}</p>
               </div>
             )}
-            {newType !== 'esp32' && (
+            {newType !== 'esp32' && newType !== 'virtual' && (
               <div className="space-y-1.5">
-                <Label>الجهاز</Label>
+                <Label>{t('cam.device')}</Label>
                 <Input dir="ltr" value={newDevice} onChange={(e) => setNewDevice(e.target.value)} />
               </div>
             )}
+            {newType === 'virtual' && (
+              <p className="rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-3 text-xs leading-relaxed text-fuchsia-900">
+                {t('virt.desc')}
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label>
-                رقعة أولى <span className="text-xs text-muted-foreground">(اختياري — يمكن الاكتشاف التلقائي لاحقاً)</span>
+                {t('cam.firstBoard')} <span className="text-xs text-muted-foreground">({t('cam.firstBoard.hint')})</span>
               </Label>
-              <Input value={newBoardLabel} onChange={(e) => setNewBoardLabel(e.target.value)} placeholder="اتركه فارغاً للاكتشاف التلقائي" />
+              <Input value={newBoardLabel} onChange={(e) => setNewBoardLabel(e.target.value)} placeholder={t('cam.firstBoard.ph')} />
             </div>
             <Button onClick={handleAdd} disabled={adding} className="w-full bg-emerald-600 hover:bg-emerald-700">
               {adding ? <RefreshCw className="h-4 w-4 animate-spin ml-1" /> : <Plus className="h-4 w-4 ml-1" />}
-              إضافة
+              {t('common.add')}
             </Button>
           </div>
         </DialogContent>
@@ -578,112 +605,115 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5 text-emerald-600" />
-              إعداد: {setupCam?.name}
+              {t('cam.setup.title', { name: setupCam?.name ?? '' })}
             </DialogTitle>
-            <DialogDescription>
-              سجّل العقدة في خدمة الرؤية، شاهد البث الحي، ثم اكتشف الرقع تلقائياً أو عاير يدوياً
-            </DialogDescription>
+            <DialogDescription>{t('cam.setup.desc')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
             {/* الإعدادات الأساسية */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>الاسم</Label>
+                <Label>{t('cam.settings.name')}</Label>
                 <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>النوع</Label>
+                <Label>{t('cam.settings.type')}</Label>
                 <Select value={formType} onValueChange={setFormType}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="esp32">عقدة ESP32 (WiFi + بطارية)</SelectItem>
-                    <SelectItem value="usb">ويب كام USB</SelectItem>
-                    <SelectItem value="picamera2">كاميرا راسبيري (CSI)</SelectItem>
-                    <SelectItem value="ip">كاميرا IP / هاتف</SelectItem>
+                    <SelectItem value="esp32">{t('camtype.esp32')}</SelectItem>
+                    <SelectItem value="usb">{t('camtype.usb')}</SelectItem>
+                    <SelectItem value="picamera2">{t('camtype.picamera2')}</SelectItem>
+                    <SelectItem value="ip">{t('camtype.ip')}</SelectItem>
+                    <SelectItem value="virtual">{t('camtype.virtual')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {formType === 'esp32' ? (
+              {formType === 'esp32' && (
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>رابط البث من العقدة</Label>
+                  <Label>{t('cam.settings.stream')}</Label>
                   <Input dir="ltr" value={formStreamUrl} onChange={(e) => setFormStreamUrl(e.target.value)} />
                 </div>
-              ) : (
+              )}
+              {formType !== 'esp32' && formType !== 'virtual' && (
                 <div className="space-y-1.5">
-                  <Label>الجهاز</Label>
+                  <Label>{t('cam.settings.device')}</Label>
                   <Input dir="ltr" value={formDevice} onChange={(e) => setFormDevice(e.target.value)} />
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label>الدقة</Label>
-                <div className="flex gap-2" dir="ltr">
-                  <Input value={formWidth} onChange={(e) => setFormWidth(e.target.value)} />
-                  <Input value={formHeight} onChange={(e) => setFormHeight(e.target.value)} />
+              {formType !== 'virtual' && (
+                <div className="space-y-1.5">
+                  <Label>{t('cam.settings.res')}</Label>
+                  <div className="flex gap-2" dir="ltr">
+                    <Input value={formWidth} onChange={(e) => setFormWidth(e.target.value)} />
+                    <Input value={formHeight} onChange={(e) => setFormHeight(e.target.value)} />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-center justify-between rounded-lg border p-3">
-                <Label>مفعّلة</Label>
+                <Label>{t('common.enabled')}</Label>
                 <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={saveBasics} variant="outline" className="flex-1">
-                حفظ وتسجيل في خدمة الرؤية
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPreviewOn(true)
-                }}
-              >
-                <Eye className="h-4 w-4 ml-1" />
-                بث حي
-              </Button>
-            </div>
-
-            {previewOn && setupCam && (
-              <LivePreview
-                cameraId={setupCam.id}
-                cornersList={selectedCornersForPreview ?? []}
-              />
+            {formType === 'virtual' && (
+              <p className="rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-3 text-xs leading-relaxed text-fuchsia-900">
+                {t('virt.note')}
+              </p>
+            )}
+            {formType !== 'virtual' && (
+              <div className="flex gap-2">
+                <Button onClick={saveBasics} variant="outline" className="flex-1">
+                  {t('cam.saveRegister')}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setStreamState('idle')
+                    setFrameSize(null)
+                    setPreviewOn(true)
+                  }}
+                >
+                  <Eye className="h-4 w-4 ml-1" />
+                  {t('cam.liveStream')}
+                </Button>
+              </div>
             )}
 
             <Separator />
 
-            {/* الاكتشاف التلقائي */}
-            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
-              <div className="flex items-center gap-2">
-                <ScanSearch className="h-4 w-4 text-emerald-700" />
-                <h3 className="font-semibold text-emerald-900">الاكتشاف التلقائي للرقع</h3>
-                <Badge variant="outline" className="text-[10px]">v2 — ميزة جديدة</Badge>
+            {/* الاكتشاف التلقائي (لا يعمل مع الافتراضية) */}
+            {formType !== 'virtual' && (
+              <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                <div className="flex items-center gap-2">
+                  <ScanSearch className="h-4 w-4 text-emerald-700" />
+                  <h3 className="font-semibold text-emerald-900">{t('cam.discover.title')}</h3>
+                  <Badge variant="outline" className="text-[10px]">{t('cam.discover.badge')}</Badge>
+                </div>
+                <p className="text-xs leading-relaxed text-emerald-800">{t('cam.discover.desc')}</p>
+                <Button onClick={autoDiscover} disabled={discovering} className="w-full bg-emerald-700 hover:bg-emerald-800">
+                  {discovering ? <RefreshCw className="h-4 w-4 animate-spin ml-1" /> : <ScanSearch className="h-4 w-4 ml-1" />}
+                  {t('cam.discover.btn')}
+                </Button>
               </div>
-              <p className="text-xs leading-relaxed text-emerald-800">
-                ضع الكاميرا بحيث تظهر كل الرقع بعلامات × كاملة، ثم اضغط الزر — سيكتشف النظام كل رقعة
-                ويعايرها تلقائياً بدون إدخال يدوي (يحتاج نموذجي ONNX على الخادم).
-              </p>
-              <Button onClick={autoDiscover} disabled={discovering} className="w-full bg-emerald-700 hover:bg-emerald-800">
-                {discovering ? <RefreshCw className="h-4 w-4 animate-spin ml-1" /> : <ScanSearch className="h-4 w-4 ml-1" />}
-                اكتشاف الرقع في الإطار الحالي
-              </Button>
-            </div>
+            )}
 
-            <Separator />
-
-            {/* المعايرة اليدوية */}
+            {/* المعايرة البصرية التفاعلية */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Crosshair className="h-4 w-4 text-emerald-600" />
-                <h3 className="font-semibold">معايرة يدوية لرقعة</h3>
+                <MousePointerClick className="h-4 w-4 text-emerald-600" />
+                <h3 className="font-semibold">{t('vc.title')}</h3>
+                <Badge className="bg-emerald-600 text-[10px] text-white">{t('vc.badge')}</Badge>
               </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">{t('vc.desc')}</p>
 
               <div className="space-y-1.5">
-                <Label>اختر رقعة (أو أنشئ عند الحفظ)</Label>
+                <Label>{t('cam.manual.select')}</Label>
                 <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="رقعة جديدة" />
+                    <SelectValue placeholder={t('cam.manual.newBoard')} />
                   </SelectTrigger>
                   <SelectContent>
                     {camBoards.map((b) => (
@@ -695,44 +725,137 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
                 </Select>
               </div>
 
-              <CalibrationPreview corners={corners} />
-
-              <div className="grid grid-cols-2 gap-3">
-                {(
-                  [
-                    ['tl', 'h1 — أسفل يمين الرقعة'],
-                    ['tr', 'a1 — أسفل يسار الرقعة'],
-                    ['br', 'a8 — أعلى يسار الرقعة'],
-                    ['bl', 'h8 — أعلى يمين الرقعة'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <div key={key} className="space-y-1.5 rounded-lg border p-2">
-                    <Label className="text-xs">{label}</Label>
-                    <div className="flex gap-2" dir="ltr">
-                      <Input
-                        className="h-8 text-xs"
-                        value={corners[key][0]}
-                        onChange={(e) => setCorners((c) => ({ ...c, [key]: [e.target.value, c[key][1]] }))}
-                        placeholder="x"
-                      />
-                      <Input
-                        className="h-8 text-xs"
-                        value={corners[key][1]}
-                        onChange={(e) => setCorners((c) => ({ ...c, [key]: [c[key][0], e.target.value] }))}
-                        placeholder="y"
-                      />
+              {/* المسرح: كاميرا افتراضية أو بث حي أو عنصر نائب */}
+              {formType === 'virtual' ? (
+                <VirtualCameraView
+                  name={formName || 'ChessCam-VIRTUAL'}
+                  width={wNum}
+                  height={hNum}
+                  linkedBoardId={selectedBoardId || undefined}
+                  overlay={
+                    <InteractiveCalibration
+                      frameW={wNum}
+                      frameH={hNum}
+                      otherBoards={otherBoards}
+                      pts={pts}
+                      onChange={setPts}
+                    />
+                  }
+                />
+              ) : previewOn && setupCam ? (
+                <div dir="ltr" className="relative overflow-hidden rounded-lg border bg-[#0f172a]">
+                  <img
+                    key={setupCam.id}
+                    src={`/api/vision/cameras/${setupCam.id}/stream.mjpg`}
+                    alt={t('cam.liveStream')}
+                    className={`block w-full ${streamState === 'error' ? 'hidden' : ''}`}
+                    onLoad={(e) => {
+                      const el = e.currentTarget
+                      setStreamState('ok')
+                      if (el.naturalWidth > 0) setFrameSize({ w: el.naturalWidth, h: el.naturalHeight })
+                    }}
+                    onError={() => setStreamState('error')}
+                  />
+                  {streamState === 'error' && (
+                    <div className="flex aspect-video w-full items-center justify-center p-6 text-center text-sm text-slate-400">
+                      {t('cam.preview.noStream')}
                     </div>
-                  </div>
-                ))}
+                  )}
+                  {streamState === 'ok' && frameSize && (
+                    <InteractiveCalibration
+                      frameW={frameSize.w}
+                      frameH={frameSize.h}
+                      otherBoards={otherBoards}
+                      pts={pts}
+                      onChange={setPts}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  <Eye className="mx-auto mb-2 h-6 w-6 opacity-40" />
+                  {t('vc.needFrame')}
+                </div>
+              )}
+
+              {/* شريط التلميح خطوة بخطوة */}
+              {pts.length < 4 ? (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {t('vc.step', {
+                      i: pts.length + 1,
+                      c: CORNER_KEYS[pts.length],
+                      d: cornerLabels[CORNER_KEYS[pts.length]],
+                    })}
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                  {t('vc.done')}
+                </div>
+              )}
+
+              {/* أدوات + مبدّل الوضع */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" disabled={pts.length === 0} onClick={() => setPts((p) => p.slice(0, -1))}>
+                  <Undo2 className="h-4 w-4 ml-1" />
+                  {t('vc.undo')}
+                </Button>
+                <Button size="sm" variant="outline" disabled={pts.length === 0} onClick={() => setPts([])}>
+                  <Eraser className="h-4 w-4 ml-1" />
+                  {t('vc.clear')}
+                </Button>
+                <div className="ms-auto flex overflow-hidden rounded-lg border text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCalMode('visual')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 ${calMode === 'visual' ? 'bg-emerald-600 text-white' : 'bg-white text-muted-foreground hover:bg-muted'}`}
+                  >
+                    <MousePointerClick className="h-3.5 w-3.5" />
+                    {t('vc.mode.visual')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalMode('numbers')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 ${calMode === 'numbers' ? 'bg-emerald-600 text-white' : 'bg-white text-muted-foreground hover:bg-muted'}`}
+                  >
+                    <Keyboard className="h-3.5 w-3.5" />
+                    {t('vc.mode.numbers')}
+                  </button>
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                ترتيب الزوايا لمحور خادم الرؤية: h1 ثم a1 ثم a8 ثم h8 (عكس عقارب الساعة بدءاً من أسفل يمين).
-                عند الاكتشاف التلقائي تُخزن بهذا الترتيب تلقائياً.
-              </p>
+
+              {/* وضع الأرقام */}
+              {calMode === 'numbers' && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <StaticQuadPreview pts={pts} frameW={wNum} frameH={hNum} />
+                  <div className="grid grid-cols-2 gap-3">
+                    {CORNER_KEYS.map((key, i) => (
+                      <div key={key} className="space-y-1.5 rounded-lg border p-2">
+                        <Label className="text-xs">{cornerLabels[key]}</Label>
+                        <div className="flex gap-2" dir="ltr">
+                          <CornerNumInput
+                            value={pts[i]?.[0]}
+                            onChange={(n) => updatePtSlot(i, 0, n)}
+                            placeholder="x"
+                          />
+                          <CornerNumInput
+                            value={pts[i]?.[1]}
+                            onChange={(n) => updatePtSlot(i, 1, n)}
+                            placeholder="y"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{t('cam.corner.orderNote')}</p>
+                </div>
+              )}
 
               <Button onClick={saveCalibration} disabled={savingCal} className="w-full bg-emerald-600 hover:bg-emerald-700">
                 {savingCal ? <RefreshCw className="h-4 w-4 animate-spin ml-1" /> : <Crosshair className="h-4 w-4 ml-1" />}
-                حفظ المعايرة
+                {t('cam.saveCal')}
               </Button>
             </div>
 
@@ -740,10 +863,8 @@ export function CamerasTab({ cameras, boards, onChange }: CamerasTabProps) {
             {setupCam?.type === 'esp32' && (
               <div className="flex items-center gap-3 rounded-lg border p-3 text-xs text-muted-foreground">
                 <BatteryMedium className="h-4 w-4" />
-                حالة البطارية تُقرأ من العقدة عند عمل خدمة الرؤية (‎/status‎ في العقدة)
-                {setupCam.batteryPct != null && (
-                  <Badge variant="outline">{setupCam.batteryPct}%</Badge>
-                )}
+                {t('cam.battery.note')}
+                {setupCam.batteryPct != null && <Badge variant="outline">{setupCam.batteryPct}%</Badge>}
               </div>
             )}
           </div>

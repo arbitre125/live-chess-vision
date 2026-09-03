@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
 import { ChessBoardMini } from '@/components/chess-board'
+import { useI18n } from '@/components/language-provider'
 import {
   Play,
   Square,
@@ -22,7 +23,6 @@ import {
   Crown,
 } from 'lucide-react'
 import type { BoardInfo } from '@/lib/types'
-import { BOARD_STATUS_LABELS } from '@/lib/types'
 
 interface BoardsTabProps {
   boards: BoardInfo[]
@@ -39,6 +39,7 @@ function movePairs(moves: string[]): { no: number; white: string; black?: string
 }
 
 export function BoardsTab({ boards, onChange }: BoardsTabProps) {
+  const { t } = useI18n()
   const { toast } = useToast()
   const [selectedId, setSelectedId] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -56,7 +57,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
   // محاكاة تلقائية للعرض التجريبي (بدون كاميرات حقيقية)
   useEffect(() => {
     if (!autoSim || !board) return
-    const t = setInterval(async () => {
+    const iv = setInterval(async () => {
       if (document.hidden) return
       await fetch('/api/simulate', {
         method: 'POST',
@@ -65,15 +66,13 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
       }).catch(() => {})
       onChange()
     }, 2500)
-    return () => clearInterval(t)
+    return () => clearInterval(iv)
   }, [autoSim, board?.id, onChange])
 
   if (!board) {
     return (
       <Card>
-        <CardContent className="p-10 text-center text-muted-foreground">
-          لا توجد رقع — أضف كاميرا أولاً من تبويب «الكاميرات»
-        </CardContent>
+        <CardContent className="p-10 text-center text-muted-foreground">{t('bd.noBoards')}</CardContent>
       </Card>
     )
   }
@@ -94,7 +93,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
       toast({ title: successMsg })
       onChange()
     } catch (e) {
-      toast({ title: 'خطأ', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+      toast({ title: t('common.error'), description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
       setBusy(false)
     }
@@ -111,12 +110,12 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
       const json = await res.json()
       if (!json.ok) throw new Error(json.error)
       toast({
-        title: `نقلة محاكاة: ${json.move?.san ?? ''}`,
-        description: 'في التشغيل الحقيقي تأتي هذه النقلة من الكاميرا',
+        title: t('bd.simMove', { m: json.move?.san ?? '' }),
+        description: t('bd.testMoveDesc'),
       })
       onChange()
     } catch (e) {
-      toast({ title: 'خطأ', description: e instanceof Error ? e.message : '', variant: 'destructive' })
+      toast({ title: t('common.error'), description: e instanceof Error ? e.message : '', variant: 'destructive' })
     } finally {
       setBusy(false)
     }
@@ -133,10 +132,10 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
         if (i % 2 === 0) pgn += `${i / 2 + 1}. `
         pgn += `${m} `
       })
-      await navigator.clipboard.writeText(pgn.trim() || '(لا نقلات بعد)')
-      toast({ title: 'نُسخ الترقيم التفصيلي (PGN) إلى الحافظة' })
+      await navigator.clipboard.writeText(pgn.trim() || t('bd.noMovesYet'))
+      toast({ title: t('bd.pgnCopied') })
     } catch {
-      toast({ title: 'فشل النسخ', variant: 'destructive' })
+      toast({ title: t('bd.copyFail'), variant: 'destructive' })
     }
   }
 
@@ -145,11 +144,11 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
       {/* اختيار الرقعة */}
       {boards.length > 1 && (
         <Tabs value={selectedId} onValueChange={setSelectedId}>
-          <TabsList className="flex-wrap h-auto">
+          <TabsList className="h-auto flex-wrap">
             {boards.map((b) => (
               <TabsTrigger key={b.id} value={b.id} className="gap-1.5">
                 {b.label}
-                {b.status === 'live' && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+                {b.status === 'live' && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -160,7 +159,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
         {/* اللوح واللاعبون */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
+            <CardTitle className="flex items-center justify-between text-base">
               <span className="flex items-center gap-2">
                 <Crown className="h-4 w-4 text-emerald-600" />
                 {board.label}
@@ -169,7 +168,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
                 variant={board.status === 'live' ? 'default' : 'secondary'}
                 className={board.status === 'live' ? 'bg-emerald-600' : ''}
               >
-                {BOARD_STATUS_LABELS[board.status] ?? board.status}
+                {t(`boardstatus.${board.status}`)}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -183,33 +182,33 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">لاعب الأبيض</Label>
+                <Label className="text-xs">{t('bd.white')}</Label>
                 <Input
                   className="h-8 text-sm"
                   defaultValue={board.whitePlayer}
-                  onBlur={(e) => e.target.value !== board.whitePlayer && patchBoard({ whitePlayer: e.target.value }, 'حُدث اسم اللاعب')}
+                  onBlur={(e) => e.target.value !== board.whitePlayer && patchBoard({ whitePlayer: e.target.value }, t('bd.playerUpdated'))}
                 />
                 <Input
                   className="h-8 text-xs"
                   dir="ltr"
                   defaultValue={board.whiteRating || ''}
-                  placeholder="تصنيف"
-                  onBlur={(e) => patchBoard({ whiteRating: Number(e.target.value) || 0 }, 'حُدث التصنيف')}
+                  placeholder={t('bd.rating')}
+                  onBlur={(e) => patchBoard({ whiteRating: Number(e.target.value) || 0 }, t('bd.ratingUpdated'))}
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">لاعب الأسود</Label>
+                <Label className="text-xs">{t('bd.black')}</Label>
                 <Input
                   className="h-8 text-sm"
                   defaultValue={board.blackPlayer}
-                  onBlur={(e) => e.target.value !== board.blackPlayer && patchBoard({ blackPlayer: e.target.value }, 'حُدث اسم اللاعب')}
+                  onBlur={(e) => e.target.value !== board.blackPlayer && patchBoard({ blackPlayer: e.target.value }, t('bd.playerUpdated'))}
                 />
                 <Input
                   className="h-8 text-xs"
                   dir="ltr"
                   defaultValue={board.blackRating || ''}
-                  placeholder="تصنيف"
-                  onBlur={(e) => patchBoard({ blackRating: Number(e.target.value) || 0 }, 'حُدث التصنيف')}
+                  placeholder={t('bd.rating')}
+                  onBlur={(e) => patchBoard({ blackRating: Number(e.target.value) || 0 }, t('bd.ratingUpdated'))}
                 />
               </div>
             </div>
@@ -222,30 +221,30 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
                 disabled={busy}
-                onClick={() => patchBoard({ action: 'start', resetGame: true }, 'بدأت لعبة جديدة')}
+                onClick={() => patchBoard({ action: 'start', resetGame: true }, t('bd.started'))}
               >
                 <Play className="h-4 w-4 ml-1" />
-                بدء لعبة
+                {t('bd.start')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
-                  const r = prompt('النتيجة النهائية: 1-0 أو 0-1 أو 1/2-1/2', '1-0')
-                  if (r) patchBoard({ action: 'finish', result: r }, 'أُرشفت اللعبة ووُلّد ملف PGN')
+                  const r = prompt(t('bd.finishPrompt'), '1-0')
+                  if (r) patchBoard({ action: 'finish', result: r }, t('bd.archived'))
                 }}
               >
                 <Flag className="h-4 w-4 ml-1" />
-                إنهاء وأرشفة
+                {t('bd.finish')}
               </Button>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => patchBoard({ action: 'reset' }, 'أُعيدت الرقعة للبداية')}>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => patchBoard({ action: 'reset' }, t('bd.resetDone'))}>
                 <RotateCcw className="h-4 w-4 ml-1" />
-                تصفير
+                {t('bd.reset')}
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={simulateOnce}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin ml-1" /> : <Dices className="h-4 w-4 ml-1" />}
-                نقلة اختبار
+                {t('bd.testMove')}
               </Button>
             </div>
 
@@ -256,7 +255,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
               onClick={() => setAutoSim((v) => !v)}
             >
               <Square className="h-4 w-4 ml-1" />
-              {autoSim ? 'إيقاف المحاكاة التلقائية' : 'محاكاة تلقائية (عرض تجريبي)'}
+              {autoSim ? t('bd.stopAutoSim') : t('bd.autoSim')}
             </Button>
           </CardContent>
         </Card>
@@ -265,16 +264,14 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">سجل النقلات ({moves.length} نصف نقلة)</CardTitle>
+              <CardTitle className="text-base">{t('bd.movesLog', { n: moves.length })}</CardTitle>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-64 rounded-md border p-3">
                 {pairs.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    لا نقلات بعد — انتظر اكتشاف الكاميرا أو جرّب «نقلة اختبار»
-                  </p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t('bd.noMoves')}</p>
                 ) : (
-                  <div dir="ltr" className="grid grid-cols-[3rem_1fr_1fr] gap-y-1 text-sm font-mono">
+                  <div dir="ltr" className="grid grid-cols-[3rem_1fr_1fr] gap-y-1 font-mono text-sm">
                     {pairs.map((p) => (
                       <div key={p.no} className="contents">
                         <span className="text-muted-foreground">{p.no}.</span>
@@ -288,7 +285,7 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
               <div className="mt-3 flex gap-2">
                 <Button size="sm" variant="outline" onClick={copyPgn}>
                   <Copy className="h-4 w-4 ml-1" />
-                  نسخ PGN
+                  {t('bd.copyPgn')}
                 </Button>
               </div>
             </CardContent>
@@ -296,33 +293,33 @@ export function BoardsTab({ boards, onChange }: BoardsTabProps) {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">الوضع الحالي (FEN)</CardTitle>
+              <CardTitle className="text-base">{t('bd.fen')}</CardTitle>
             </CardHeader>
             <CardContent>
-              <code dir="ltr" className="block rounded-md bg-muted p-3 text-xs font-mono break-all">
+              <code dir="ltr" className="block break-all rounded-md bg-muted p-3 font-mono text-xs">
                 {board.fen}
               </code>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div className="flex items-center justify-between rounded-lg border p-2.5">
-                  <span className="text-muted-foreground">البطولة</span>
+                  <span className="text-muted-foreground">{t('bd.tournament')}</span>
                   <Input
                     className="h-8 w-40 text-sm"
                     defaultValue={board.tournament}
-                    onBlur={(e) => e.target.value !== board.tournament && patchBoard({ tournament: e.target.value }, 'حُدثت البطولة')}
+                    onBlur={(e) => e.target.value !== board.tournament && patchBoard({ tournament: e.target.value }, t('bd.tournamentUpdated'))}
                   />
                 </div>
                 <div className="flex items-center justify-between rounded-lg border p-2.5">
-                  <span className="text-muted-foreground">الجولة</span>
+                  <span className="text-muted-foreground">{t('bd.round')}</span>
                   <Input
                     className="h-8 w-32 text-sm"
                     defaultValue={board.roundLabel}
-                    onBlur={(e) => e.target.value !== board.roundLabel && patchBoard({ roundLabel: e.target.value }, 'حُدثت الجولة')}
+                    onBlur={(e) => e.target.value !== board.roundLabel && patchBoard({ roundLabel: e.target.value }, t('bd.roundUpdated'))}
                   />
                 </div>
               </div>
               {board.result && (
-                <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-center font-bold text-emerald-800">
-                  النتيجة: {board.result}
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center font-bold text-emerald-800">
+                  {t('bd.result', { r: board.result })}
                 </div>
               )}
             </CardContent>

@@ -81,22 +81,5 @@ export interface GameRecord {
   board?: { label: string }
 }
 
-export const CAMERA_TYPE_LABELS: Record<string, string> = {
-  esp32: 'عقدة ESP32 (WiFi)',
-  picamera2: 'كاميرا راسبيري (CSI)',
-  usb: 'ويب كام USB',
-  ip: 'كاميرا IP / هاتف',
-}
-
-export const STATUS_LABELS: Record<string, string> = {
-  offline: 'غير متصلة',
-  online: 'متصلة',
-  detecting: 'تكتشف النقلات',
-  error: 'خطأ',
-}
-
-export const BOARD_STATUS_LABELS: Record<string, string> = {
-  idle: 'مستمرة',
-  live: 'مباشر',
-  finished: 'منتهية',
-}
+// ملاحظة: تسميات الحالات والأنواع مترجمة الآن عبر src/lib/i18n.ts
+// (المفاتيح: camtype.* و status.* و boardstatus.*)

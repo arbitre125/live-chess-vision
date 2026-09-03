@@ -5,6 +5,8 @@ import { DashboardTab } from '@/components/admin/dashboard-tab'
 import { CamerasTab } from '@/components/admin/cameras-tab'
 import { BoardsTab } from '@/components/admin/boards-tab'
 import { SyncTab } from '@/components/admin/sync-tab'
+import { LanguageProvider, useI18n } from '@/components/language-provider'
+import { LanguageSwitcher } from '@/components/admin/language-switcher'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -19,7 +21,8 @@ import {
 } from 'lucide-react'
 import type { BoardInfo, CameraInfo, SettingsInfo, SystemStatus } from '@/lib/types'
 
-export default function AdminPage() {
+function AdminShell() {
+  const { t, dir } = useI18n()
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [cameras, setCameras] = useState<CameraInfo[]>([])
   const [boards, setBoards] = useState<BoardInfo[]>([])
@@ -64,11 +67,9 @@ export default function AdminPage() {
               <Castle className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-base font-bold sm:text-lg">
-                نظام الشطرنج الحي بالكاميرا — صفحة الأدمن
-              </h1>
+              <h1 className="truncate text-base font-bold sm:text-lg">{t('app.title')}</h1>
               <p className="truncate text-xs text-muted-foreground">
-                {settings?.clubName || 'نادي سبورتينغ أريانة للشطرنج'} — أريانة، تونس
+                {settings?.clubName || t('app.club')} — {t('app.location')}
               </p>
             </div>
           </div>
@@ -78,12 +79,13 @@ export default function AdminPage() {
               className={`gap-1.5 ${online > 0 ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-slate-50 text-slate-600'}`}
             >
               {online > 0 ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              {online} كاميرا متصلة
+              {t('header.connected', { n: online })}
             </Badge>
+            <LanguageSwitcher />
             <button
               onClick={refresh}
               className="rounded-md p-2 text-muted-foreground hover:bg-muted"
-              aria-label="تحديث"
+              aria-label={t('common.refresh')}
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -92,23 +94,23 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <Tabs defaultValue="dashboard" dir="rtl" className="space-y-5">
+        <Tabs defaultValue="dashboard" dir={dir} className="space-y-5">
           <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-white p-1 shadow-sm">
             <TabsTrigger value="dashboard" className="gap-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               <LayoutDashboard className="h-4 w-4" />
-              لوحة التحكم
+              {t('tab.dashboard')}
             </TabsTrigger>
             <TabsTrigger value="cameras" className="gap-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               <Camera className="h-4 w-4" />
-              الكاميرات
+              {t('tab.cameras')}
             </TabsTrigger>
             <TabsTrigger value="boards" className="gap-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               <Crown className="h-4 w-4" />
-              الرقع والألعاب
+              {t('tab.boards')}
             </TabsTrigger>
             <TabsTrigger value="sync" className="gap-1.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
               <CloudUpload className="h-4 w-4" />
-              المزامنة
+              {t('tab.sync')}
             </TabsTrigger>
           </TabsList>
 
@@ -127,15 +129,23 @@ export default function AdminPage() {
         </Tabs>
 
         <footer className="mt-10 pb-6 text-center text-xs text-muted-foreground">
-          Live Chess Vision — يعمل محلياً على الراسبيري عبر
+          Live Chess Vision — {t('footer.text')}
           <code dir="ltr" className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono">http://raspberrypi.local:3000</code>
           {lastRefresh && (
-            <span dir="ltr" className="mr-2">
-              (آخر تحديث {lastRefresh.toLocaleTimeString()})
+            <span dir="ltr" className="mx-2 inline-block">
+              ({t('common.lastUpdate')} {lastRefresh.toLocaleTimeString()})
             </span>
           )}
         </footer>
       </main>
     </div>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <LanguageProvider>
+      <AdminShell />
+    </LanguageProvider>
   )
 }

@@ -7,6 +7,7 @@
 """
 import threading
 import time
+import urllib.parse
 import urllib.request
 
 import cv2
@@ -18,8 +19,8 @@ class FrameSource:
     def __init__(self, source_id, kind="esp32", url=None, device=0,
                  width=None, height=None, reconnect_s=3.0):
         self.source_id = source_id
-        self.kind = kind          # esp32 | usb | file
-        self.url = url            # http://chesscam-1.local/stream
+        self.kind = kind          # esp32 | usb | file | virtual
+        self.url = url            # http://chesscam-1.local/stream أو virtual://normal
         self.device = device
         self.width = width
         self.height = height
@@ -81,6 +82,8 @@ class FrameSource:
                     self._run_mjpeg()
                 elif self.kind == "usb":
                     self._run_usb()
+                elif self.kind == "virtual":
+                    self._run_virtual()
                 elif self.kind == "file":
                     self._run_file()
             except Exception as e:  # noqa: BLE001
@@ -156,6 +159,28 @@ class FrameSource:
         while not self._stop.is_set():
             self._push(frame)
             time.sleep(1.0)
+
+    def _run_virtual(self):
+        """كاميرا افتراضية: توليد رقعة متحركة بنقلات قانونية — تجربة بدون عتاد.
+        url مثل: virtual://normal (أو virtual://slow | virtual://fast)."""
+        from virtual_source import make_virtual_generator
+        speed = "normal"
+        try:
+            parsed = urllib.parse.urlparse(self.url or "")
+            if parsed.scheme == "virtual" and parsed.netloc:
+                speed = parsed.netloc
+        except ValueError:
+            pass
+        gen = make_virtual_generator(
+            width=self.width or 1280, height=self.height or 1024, speed=speed)
+        self.connected = True
+        while not self._stop.is_set():
+            try:
+                frame = gen()
+            except Exception as e:  # noqa: BLE001
+                raise IOError(f"فشل المولد الافتراضي: {e}")
+            self._push(frame)
+            time.sleep(0.5)  # 2 إطار/ث كافٍ لتحليل الشطرنج
 
 
 def np_frombuffer(jpg_bytes):

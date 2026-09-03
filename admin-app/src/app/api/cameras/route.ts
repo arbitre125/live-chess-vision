@@ -9,6 +9,17 @@ export async function GET() {
     include: { boards: true },
     orderBy: { createdAt: 'asc' },
   })
+
+  // الكاميرات الافتراضية تعمل داخل المتصفح دائماً — نعلّمها متصلة
+  for (const c of cameras) {
+    if (c.type === 'virtual' && c.enabled && c.status !== 'online') {
+      const now = new Date()
+      await db.camera.update({ where: { id: c.id }, data: { status: 'online', lastSeen: now } })
+      c.status = 'online'
+      c.lastSeen = now
+    }
+  }
+
   return NextResponse.json({ ok: true, cameras })
 }
 

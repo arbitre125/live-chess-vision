@@ -45,7 +45,7 @@ orch = Orchestrator()
 
 
 class CameraIn(BaseModel):
-    kind: str = Field(default="esp32", description="esp32 | usb | file")
+    kind: str = Field(default="esp32", description="esp32 | usb | file | virtual")
     url: str | None = Field(default=None, description="رابط /stream لعقدة ESP32")
     device: int | str | None = Field(default=0, description="رقم/مسار كاميرا USB")
     width: int | None = None
